@@ -1,0 +1,9 @@
+bazarr/
+jellyfin/
+jellyseerr/
+prowlarr/
+qbittorrent/
+radarr/
+sonarr/
+.env
+tareas.txt

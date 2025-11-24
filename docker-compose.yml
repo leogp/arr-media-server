@@ -1,0 +1,110 @@
+services:
+  # Torrent client
+  qbittorrent: 
+    image: lscr.io/linuxserver/qbittorrent:latest 
+    container_name: qbittorrent 
+    hostname: qbittorrent 
+    restart: unless-stopped 
+    volumes: 
+      - ./qbittorrent/config:/config 
+      - /media/downloads:/downloads 
+    ports: 
+      - "8080:8080" # Web UI
+      - "6881:6881" # TCP port for torrents
+      - "6881:6881/udp" # UDP port for torrents
+    environment:
+      - UMASK=022
+    env_file:
+      - .env
+  # Indexer: search torrent and send the magnet link to the torrent client
+  prowlarr: 
+    image: lscr.io/linuxserver/prowlarr:latest 
+    container_name: prowlarr 
+    hostname: prowlarr 
+    restart: unless-stopped 
+    volumes: 
+      - ./prowlarr/config:/config 
+      - /media/prowlarr/backup:/data/backup 
+      - /media/downloads:/downloads 
+    ports: 
+      - "9696:9696" # Web UI
+    env_file:
+      - .env
+  # Media management (tv shows and movies) 
+  sonarr: 
+    image: lscr.io/linuxserver/sonarr:latest 
+    container_name: sonarr 
+    hostname: sonarr 
+    restart: unless-stopped 
+    volumes: 
+      - ./sonarr/config:/config 
+      - /media/sonarr/backup:/data/backup 
+      - /media/tvshows:/data/tvshows 
+      - /media/downloads:/downloads
+    ports: 
+      - "8989:8989" # Web UI 
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/Argentina/Buenos_Aires
+  radarr: 
+    image: lscr.io/linuxserver/radarr:latest 
+    container_name: radarr 
+    hostname: radarr 
+    restart: unless-stopped 
+    volumes: 
+      - ./radarr/config:/config 
+      - /media/radarr/backup:/data/backup 
+      - /media/movies:/data/movies 
+      - /media/downloads:/downloads 
+    ports: 
+      - 7878:7878 # Web UI 
+    env_file:
+      - .env
+  # Subtitles
+  bazarr: 
+    image: linuxserver/bazarr 
+    container_name: bazarr 
+    hostname: bazarr 
+    restart: unless-stopped 
+    volumes: 
+      - ./bazarr/config:/config 
+      - /media/movies:/data/movies 
+      - /media/tvshows:/data/tvshows 
+    ports: 
+      - 6767:6767 
+    depends_on: 
+      - radarr 
+      - sonarr 
+  # Netflix-style user interface for requesting multimedia content
+  Jellyseerr: 
+    image: fallenbagel/jellyseerr:latest 
+    container_name: jellyseerr 
+    hostname: jellyseerr 
+    restart: unless-stopped 
+    volumes: 
+      - ./jellyseerr/config:/config 
+    ports: 
+      - 5055:5055 
+    depends_on: 
+      - radarr 
+      - sonarr 
+    environment:
+      - LOG_LEVEL=info # change to debug if it's necessary
+      - TZ=${TZ}
+  # Multimedia Streaming Server. Transfer content to the client device
+  jellyfin: 
+    image: lscr.io/linuxserver/jellyfin:latest 
+    container_name: jellyfin 
+    hostname: jellyfin 
+    restart: unless-stopped 
+    volumes: 
+      - ./jellyfin/config:/config 
+      - /media/movies:/data/movies 
+      - /media/tvshows:/data/tvshows 
+    ports: 
+    - "8096:8096/tcp" # Web UI 
+    - "7359:7359/udp" # Automatic server discovery 
+    - "1900:1900/udp" # DLNA/UPnP 
+    env_file:
+      - .env
