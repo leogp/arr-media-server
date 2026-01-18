@@ -1,9 +1,9 @@
 ## Project overwiev
 
 
-This project provides a complete self-hosted media automation and streaming server using the Arr Suite, a collection of tools designed to automate media discovery, downloading, organization, and library management.The entire stack is containerized and designed for reliability, maintainability, and zero-touch automation once configured.
+This project provides a complete self-hosted media automation and streaming server using the Arr Suite, a collection of tools designed to automate media discovery, downloading, organization, and library management. The entire stack is containerized and designed for reliability, maintainability, and zero-touch automation once configured.
 
-The entire stack is containerized and includes:
+The stack includes:
 
 * qBittorrent
 * Prowlarr
@@ -32,7 +32,7 @@ For legal reasons, I must clarify that I do not support or encourage the unautho
 ## Create and run containers
 Define your host media path and change it in docker-compose.yml
 
-For the purposes of this guide, I will use /media 
+For the purposes of this guide, I will use `/media` 
 
 Then do
 
@@ -145,7 +145,7 @@ Add Sonarr
 
 ```
 Default Server: check
-Server Name: Sanarr
+Server Name: Sonarr
 Hostname or IP Address: sonarr
 Port: 8989
 API Key: sonarrApiKey
@@ -155,10 +155,29 @@ Root Folder: /data/tvshows
 
 ## Fedora guide
 
-__Set SElinux in permissive mode__
+On Fedora, SELinux runs in enforcing mode by default. Containers are confined by SELinux and are only allowed to read or write host directories that have the correct SELinux security context.
+
+ARR services (qBittorrent, Sonarr, Radarr, Bazarr, Jellyfin, etc.) mount host paths under `/media` to store and manage downloads and media files. By default, directories under `/media` are labeled with a generic mount context `(mnt_t)`, which containers are **not permitted to access** when SELinux is enforcing.
+
+To fix this, you must **permanently label** `/media` **with the** `container_file_t` **SELinux type**. This explicitly tells SELinux that the directory is intended for use by containers.
+
+Because this context change is persistent and independent of container recreation, all ARR containers can read and write to `/media` normally after reboot, without disabling SELinux or relying on fragile volume flags.
+
+__Label `/media` with `container_file_t`__
 
 ```sh
-sudo setenforce Permissive
+sudo semanage fcontext -a -t container_file_t "/media(/.*)?"
+sudo restorecon -Rv /media
+```
+
+Verify the label with:
+```sh
+ls -Zd /media
+```
+Expected output:
+
+```arduino
+system_u:object_r:container_file_t:s0 /media
 ```
 
 __If you have NVIDIA and want to caste, you have to install NVIDIA-container-toolkit to enable jellyfin to use NVIDIA drivers__

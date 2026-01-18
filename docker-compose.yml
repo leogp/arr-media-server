@@ -83,7 +83,7 @@ services:
     hostname: jellyseerr 
     restart: unless-stopped 
     volumes: 
-      - ./jellyseerr/config:/config 
+      - ./jellyseerr/config:/app/config 
     ports: 
       - 5055:5055 
     depends_on: 
