@@ -155,13 +155,15 @@ Root Folder: /data/tvshows
 
 ## Fedora guide
 
-On Fedora, SELinux runs in enforcing mode by default. Containers are confined by SELinux and are only allowed to read or write host directories that have the correct SELinux security context.
+On Fedora, SELinux runs in enforcing mode by default. Containers are confined by SELinux and are only allowed to read from or write to host directories that have the correct SELinux security context.
 
-ARR services (qBittorrent, Sonarr, Radarr, Bazarr, Jellyfin, etc.) mount host paths under `/media` to store and manage downloads and media files. By default, directories under `/media` are labeled with a generic mount context `(mnt_t)`, which containers are **not permitted to access** when SELinux is enforcing.
+With the proposed configuration, ARR services (qBittorrent, Sonarr, Radarr, Bazarr, Jellyfin, etc.) mount host paths under `/media` to store and manage downloads and media files. In addition, ARR containers also mount configuration directories from the project root folder (for example, `./qbittorrent/config`, `./sonarr/config`, etc.).
 
-To fix this, you must **permanently label** `/media` **with the** `container_file_t` **SELinux type**. This explicitly tells SELinux that the directory is intended for use by containers.
+By default, directories on the host filesystem are labeled with contexts that are **not permitted for container access** (such as `mnt_t` or standard user contexts) when SELinux is enforcing.
 
-Because this context change is persistent and independent of container recreation, all ARR containers can read and write to `/media` normally after reboot, without disabling SELinux or relying on fragile volume flags.
+To fix this, you must **permanently label** `/media` and your project root directory **with the** `container_file_t` **SELinux type**. This explicitly tells SELinux that these directories are intended to be accessed by containers.
+
+Because these context changes are persistent and independent of container recreation, all ARR containers can read from and write to both `/media` and their configuration directories normally after a reboot, without disabling SELinux or relying on fragile volume flags.
 
 __Label `/media` with `container_file_t`__
 
@@ -179,6 +181,10 @@ Expected output:
 ```arduino
 system_u:object_r:container_file_t:s0 /media
 ```
+
+__Project root directory__
+
+Repeat the same steps for the project root directory if it is mounted into containers.
 
 __If you have NVIDIA and want to caste, you have to install NVIDIA-container-toolkit to enable jellyfin to use NVIDIA drivers__
 https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
