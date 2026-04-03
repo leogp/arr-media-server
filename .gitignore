@@ -8,3 +8,5 @@ sonarr/
 .env
 tareas.txt
 indexers.png
+CLAUDE.md
+.vscode

@@ -153,6 +153,90 @@ Quality Profile: Any
 Root Folder: /data/tvshows
 ```
 
+## Hardware transcoding
+
+Hardware transcoding is OS-independent and can significantly improve streaming performance by offloading video encoding to your GPU.
+
+### NVIDIA GPUs
+
+If you have an NVIDIA GPU, install the **NVIDIA Container Toolkit** following the official guide:
+https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+
+Then add the following to the `jellyfin` service in `docker-compose.yml`:
+
+```yaml
+deploy:
+  resources:
+    reservations:
+      devices:
+        - driver: nvidia
+          count: all
+          capabilities: [gpu]
+```
+
+### Intel Quick Sync and AMD GPUs
+
+For Windows systems with Intel Quick Sync or AMD GPUs, enable the corresponding option in Docker Desktop settings under **Resources → GPU**.
+
+## Windows guide
+
+### Prerequisites
+
+1. Install **Docker Desktop** from https://www.docker.com/products/docker-desktop/
+2. During installation, enable the **WSL 2** backend (recommended) when prompted.
+3. After install, open Docker Desktop → Settings → General → confirm **"Use the WSL 2 based engine"** is checked.
+
+### Prepare media folders
+
+Choose a drive and folder where media will be stored, for example `D:\media`. Create the subfolders:
+
+```
+D:\media\movies
+D:\media\tvshows
+D:\media\downloads
+```
+
+### Update docker-compose.yml paths
+
+Windows paths in Docker Desktop use a forward-slash notation. Replace every `/media` host path in `docker-compose.yml` with your chosen folder:
+
+```yaml
+# Example: replace
+- /media/downloads:/downloads
+# with
+- D:/media/downloads:/downloads
+```
+
+Apply this to all volume entries for `qbittorrent`, `sonarr`, `radarr`, `bazarr`, `prowlarr`, and `jellyfin`.
+
+> **Note:** Config volumes like `./qbittorrent/config:/config` use relative paths and do not need to change.
+
+### Set up .env
+
+```sh
+copy .env.example .env
+```
+
+Open `.env` and set:
+
+```env
+PUID=1000
+PGID=1000
+TZ=America/Argentina/Buenos_Aires
+```
+
+On Windows, `PUID`/`PGID` are accepted by LinuxServer images but have no effect on file ownership — the containers still work correctly.
+
+### Start the stack
+
+Open a terminal (PowerShell or Command Prompt) in the project folder:
+
+```sh
+docker compose up -d
+```
+
+All service web UIs are then reachable at `http://localhost:<port>` as listed in the README.
+
 ## Fedora guide
 
 On Fedora, SELinux runs in enforcing mode by default. Containers are confined by SELinux and are only allowed to read from or write to host directories that have the correct SELinux security context.
@@ -186,5 +270,14 @@ __Project root directory__
 
 Repeat the same steps for the project root directory if it is mounted into containers.
 
-__If you have NVIDIA and want to caste, you have to install NVIDIA-container-toolkit to enable jellyfin to use NVIDIA drivers__
-https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+## Official documentation
+
+This repository provides a basic setup for each service. For advanced configuration, troubleshooting, and full feature support, refer to the official documentation:
+
+- **qBittorrent**: https://github.com/qbittorrent/qBittorrent/wiki
+- **Prowlarr**: https://wiki.servarr.com/prowlarr
+- **Sonarr**: https://wiki.servarr.com/sonarr
+- **Radarr**: https://wiki.servarr.com/radarr
+- **Bazarr**: https://wiki.bazarr.media
+- **Jellyseerr**: https://docs.jellyseerr.dev
+- **Jellyfin**: https://jellyfin.org/docs

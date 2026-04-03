@@ -63,16 +63,18 @@ services:
       - .env
   # Subtitles
   bazarr: 
-    image: linuxserver/bazarr 
+    image: lscr.io/linuxserver/bazarr:latest 
     container_name: bazarr 
     hostname: bazarr 
     restart: unless-stopped 
     volumes: 
-      - ./bazarr/config:/config 
-      - /media/movies:/data/movies 
-      - /media/tvshows:/data/tvshows 
+      - ./bazarr/config:/config:Z 
+      - /media/movies:/data/movies:Z 
+      - /media/tvshows:/data/tvshows:Z
     ports: 
       - 6767:6767 
+    env_file:
+      - .env 
     depends_on: 
       - radarr 
       - sonarr 
@@ -96,15 +98,18 @@ services:
   jellyfin: 
     image: lscr.io/linuxserver/jellyfin:latest 
     container_name: jellyfin 
+    shm_size: "1gb"
     hostname: jellyfin 
     restart: unless-stopped 
     volumes: 
-      - ./jellyfin/config:/config 
-      - /media/movies:/data/movies 
-      - /media/tvshows:/data/tvshows 
+      - ./jellyfin/config:/config:Z 
+      - /media/movies:/data/movies:Z 
+      - /media/tvshows:/data/tvshows:Z 
     ports: 
     - "8096:8096/tcp" # Web UI 
     - "7359:7359/udp" # Automatic server discovery 
     - "1900:1900/udp" # DLNA/UPnP 
+    environment:
+      - JELLYFIN_CACHE_DIR=/tmp
     env_file:
       - .env
