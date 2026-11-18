@@ -81,9 +81,12 @@ services:
     depends_on:
       - radarr
       - sonarr
-  # Netflix-style user interface for requesting multimedia content
-  Jellyseerr:
-    image: fallenbagel/jellyseerr:latest
+  # Netflix-style user interface for requesting multimedia content (Seerr, successor of Jellyseerr).
+  # Reuses ./jellyseerr/config, which Seerr migrates automatically on first start.
+  # The container runs as UID 1000, so the config folder must be owned by 1000:1000.
+  jellyseerr:
+    image: ghcr.io/seerr-team/seerr:latest
+    init: true
     container_name: jellyseerr
     hostname: jellyseerr
     restart: unless-stopped
