@@ -46,6 +46,19 @@ services:
       timeout: 10s
       retries: 5
       start_period: 60s
+  # Optional: solves Cloudflare challenges for Prowlarr indexers.
+  # Disabled by default; enable with COMPOSE_PROFILES=flaresolverr in .env.
+  # Only reachable from other containers at http://flaresolverr:8191 (no host port).
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    hostname: flaresolverr
+    restart: unless-stopped
+    profiles:
+      - flaresolverr
+    environment:
+      - LOG_LEVEL=info
+      - TZ=${TZ}
   # Media management (tv shows and movies)
   sonarr:
     image: lscr.io/linuxserver/sonarr:latest
