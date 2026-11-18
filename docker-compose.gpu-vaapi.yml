@@ -1,0 +1,14 @@
+# Optional overlay: Intel/AMD hardware transcoding (VAAPI / Quick Sync) for Jellyfin. Linux only.
+#
+# Enable it by adding this file to COMPOSE_FILE in .env:
+#   COMPOSE_FILE=compose.yaml:docker-compose.gpu-vaapi.yml
+#
+# VAAPI_DEVICE selects the render node (default /dev/dri/renderD128). On machines with more
+# than one GPU, find the right node with `ls -l /dev/dri/by-path` and `lspci | grep -E 'VGA|3D'`.
+# The LinuxServer image adds its user to the device's group automatically.
+# See README "Hardware transcoding".
+
+services:
+  jellyfin:
+    devices:
+      - ${VAAPI_DEVICE:-/dev/dri/renderD128}:${VAAPI_DEVICE:-/dev/dri/renderD128}
