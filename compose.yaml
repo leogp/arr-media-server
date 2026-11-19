@@ -2,8 +2,8 @@
 #
 # Before the first `docker compose up -d`:
 #   - All OSes: copy .env.example to .env and set DATA_ROOT (host folder that holds downloads/, movies/, tvshows/).
-#   - Fedora:   label DATA_ROOT and this project directory persistently with
-#               `semanage fcontext -a -t container_file_t` + `restorecon -RFv`.
+#   - Fedora:   use a DATA_ROOT outside /media (e.g. /srv/media) and label it and this project
+#               directory persistently with `semanage fcontext -a -t container_file_t` + `restorecon -RFv`.
 #               Volumes intentionally carry no :z/:Z flags. See README "Fedora guide".
 #   - Ubuntu:   create the DATA_ROOT subfolders and chown them to PUID:PGID. See README "Ubuntu guide".
 #   - Windows:  keep DATA_ROOT inside the WSL2 filesystem for hardlinks. See README "Windows guide".

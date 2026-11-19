@@ -39,8 +39,8 @@ There is a single `compose.yaml` for every OS. The only thing that changes betwe
 
 | OS | Compose file | `DATA_ROOT` example | Guide |
 |---|---|---|---|
-| Fedora | `compose.yaml` | `/media` | [Fedora guide](#fedora-guide) |
-| Ubuntu | `compose.yaml` | `/media` | [Ubuntu guide](#ubuntu-guide) |
+| Fedora | `compose.yaml` | `/srv/media` | [Fedora guide](#fedora-guide) |
+| Ubuntu | `compose.yaml` | `/srv/media` | [Ubuntu guide](#ubuntu-guide) |
 | Windows (Docker Desktop + WSL2) | `compose.yaml` | `/home/<user>/media` (inside WSL2) | [Windows guide](#windows-guide) |
 
 Optional pieces are added from `.env`, never by editing `compose.yaml`:
@@ -63,7 +63,7 @@ When `COMPOSE_FILE` is unset, Compose loads `compose.yaml` only.
 All media lives under one host folder, `DATA_ROOT`, which keeps the usual structure:
 
 ```
-${DATA_ROOT}            (e.g. /media)
+${DATA_ROOT}            (e.g. /srv/media)
 ├── downloads           qBittorrent saves here
 ├── movies              Radarr library
 └── tvshows             Sonarr library
@@ -95,7 +95,7 @@ Copy the example environment file and set `DATA_ROOT` to your host media folder:
 cp .env.example .env
 ```
 
-For the purposes of this guide, I will use `/media`.
+For the purposes of this guide, I will use `/srv/media` on Linux. Avoid `/media`: it is reserved for removable drives, and on Fedora SELinux never labels its content (see the [Fedora guide](#fedora-guide)).
 
 `.env` contains:
 
@@ -367,19 +367,38 @@ Docker Desktop only supports GPU passthrough to Linux containers for NVIDIA GPUs
 
 On Fedora, SELinux runs in enforcing mode by default. Containers are confined by SELinux and are only allowed to read from or write to host directories that have the correct SELinux security context.
 
-With the proposed configuration, ARR services (qBittorrent, Sonarr, Radarr, Bazarr, Jellyfin, etc.) mount `${DATA_ROOT}` (`/media`) to store and manage downloads and media files. In addition, ARR containers also mount configuration directories from the project root folder (for example, `./qbittorrent/config`, `./sonarr/config`, etc.).
+With the proposed configuration, ARR services (qBittorrent, Sonarr, Radarr, Bazarr, Jellyfin, etc.) mount `${DATA_ROOT}` (`/srv/media`) to store and manage downloads and media files. In addition, ARR containers also mount configuration directories from the project root folder (for example, `./qbittorrent/config`, `./sonarr/config`, etc.).
 
 By default, directories on the host filesystem are labeled with contexts that are **not permitted for container access** (such as `mnt_t` or standard user contexts) when SELinux is enforcing.
 
-To fix this, you must **permanently label** `/media` and your project root directory **with the** `container_file_t` **SELinux type**. This explicitly tells SELinux that these directories are intended to be accessed by containers.
+To fix this, you must **permanently label** `DATA_ROOT` and your project root directory **with the** `container_file_t` **SELinux type**. This explicitly tells SELinux that these directories are intended to be accessed by containers.
 
-Because these context changes are persistent and independent of container recreation, all ARR containers can read from and write to both `/media` and their configuration directories normally after a reboot, without disabling SELinux or relying on fragile volume flags.
+Because these context changes are persistent and independent of container recreation, all ARR containers can read from and write to both `DATA_ROOT` and their configuration directories normally after a reboot, without disabling SELinux or relying on fragile volume flags.
+
+__Why `/srv/media` and not `/media`__
+
+On Fedora, `/media` is reserved for removable devices that are mounted automatically. The base SELinux policy labels `/media` and its direct subfolders as `mnt_t`, and defines everything deeper as `<<None>>` (from `/etc/selinux/targeted/contexts/files/file_contexts`; `semanage fcontext -l` shows the same rules):
+
+```
+/media(/[^/]*)?	-d	system_u:object_r:mnt_t:s0
+/media/[^/]*/.*	<<none>>
+```
+
+`<<None>>` means "never relabel": `restorecon` skips the content of `/media/movies`, `/media/tvshows`, etc., so a `semanage fcontext` rule for `/media(/.*)?` has no effect on your media files. `/srv` is meant for data served by the system and has no such exception, so a rule for `/srv/media` is applied to the whole tree. Use `/srv/media` (or any other path outside `/media`) as `DATA_ROOT`:
+
+```env
+DATA_ROOT=/srv/media
+```
+
+If your media is currently under `/media`, see [Migrating an existing install](#migrating-an-existing-install).
 
 __Create the media folders__
 
+If `/srv/media` is the mount point of a dedicated disk, mount it first (an `/etc/fstab` entry with `/srv/media` as mount point). Then create the folders:
+
 ```sh
-sudo mkdir -p /media/{downloads,movies,tvshows}
-sudo chown -R 1000:1000 /media/{downloads,movies,tvshows}
+sudo mkdir -p /srv/media/{downloads,movies,tvshows}
+sudo chown -R 1000:1000 /srv/media/{downloads,movies,tvshows}
 ```
 
 Use your own `PUID:PGID` if they are not `1000:1000`.
@@ -387,8 +406,8 @@ Use your own `PUID:PGID` if they are not `1000:1000`.
 __Label `DATA_ROOT` with `container_file_t`__
 
 ```sh
-sudo semanage fcontext -a -t container_file_t "/media(/.*)?"
-sudo restorecon -RFv /media
+sudo semanage fcontext -a -t container_file_t "/srv/media(/.*)?"
+sudo restorecon -RFv /srv/media
 ```
 
 __Label the project root directory__
@@ -415,20 +434,35 @@ Persistent labeling with `semanage fcontext` is done once and survives reboots, 
 
 __Verify__
 
+First check what the policy *expects* for a file inside the library. `matchpathcon` reads the rules, so it works even for a path that does not exist yet:
+
 ```sh
-ls -Zd /media /media/downloads /media/movies /media/tvshows
+matchpathcon /srv/media/movies/test.mkv
 ```
 Expected output:
 
 ```arduino
-system_u:object_r:container_file_t:s0 /media
+/srv/media/movies/test.mkv	system_u:object_r:container_file_t:s0
+```
+
+If it prints `<<none>>` or `mnt_t`, `DATA_ROOT` is still under `/media` or the rule was not added.
+
+Then check the actual labels on disk:
+
+```sh
+ls -Zd /srv/media /srv/media/downloads /srv/media/movies /srv/media/tvshows
+```
+Expected output:
+
+```arduino
+system_u:object_r:container_file_t:s0 /srv/media
 ...
 ```
 
 Check that no file still carries private MCS categories. This command should print nothing:
 
 ```sh
-sudo find /media -context '*:s0:c*'
+sudo find /srv/media -context '*:s0:c*'
 sudo find "$(pwd -P)" -context '*:s0:c*'
 ```
 
@@ -452,12 +486,12 @@ sudo usermod -aG docker $USER
 Create the folders and give them to the user and group set in `PUID`/`PGID` (`id -u` / `id -g`, usually `1000`):
 
 ```sh
-sudo mkdir -p /media/{downloads,movies,tvshows}
-sudo chown -R 1000:1000 /media/{downloads,movies,tvshows}
-sudo chmod -R u=rwX,g=rwX,o=rX /media/{downloads,movies,tvshows}
+sudo mkdir -p /srv/media/{downloads,movies,tvshows}
+sudo chown -R 1000:1000 /srv/media/{downloads,movies,tvshows}
+sudo chmod -R u=rwX,g=rwX,o=rX /srv/media/{downloads,movies,tvshows}
 ```
 
-Only the subfolders change owner: Ubuntu also uses `/media/<user>` to automount removable drives, so leave `/media` itself owned by root. If you prefer, use another folder such as `/srv/media` and set it as `DATA_ROOT`.
+`/srv/media` is used instead of `/media` because Ubuntu uses `/media/<user>` to automount removable drives. Only the subfolders change owner, so `/srv/media` itself can stay owned by root.
 
 Then follow [Create and run containers](#create-and-run-containers).
 
@@ -526,7 +560,7 @@ All service web UIs are then reachable at `http://localhost:<port>` as listed in
 
 ## Migrating an existing install
 
-These steps move an install that used separate `/downloads`, `/data/movies` and `/data/tvshows` mounts to the single `/data` mount. The host folders do not change, so no data is moved.
+These steps move an install that used separate `/downloads`, `/data/movies` and `/data/tvshows` mounts to the single `/data` mount. The folder structure (`downloads/`, `movies/`, `tvshows/`) does not change. On Fedora the data root also moves from `/media` to `/srv/media` (see [Why `/srv/media` and not `/media`](#fedora-guide)); paths inside the containers stay `/data/...`, so no service setting depends on the host path.
 
 1. **Stop the stack and update `.env`.** Pull the new version of the repository and add the new variables from `.env.example` (`UMASK=002` and `DATA_ROOT`):
 
@@ -537,7 +571,7 @@ These steps move an install that used separate `/downloads`, `/data/movies` and 
 
    ```env
    UMASK=002
-   DATA_ROOT=/media
+   DATA_ROOT=/srv/media
    ```
 
    Seerr replaces Jellyseerr and runs as UID 1000. Back up its config and fix the owner before starting:
@@ -547,36 +581,79 @@ These steps move an install that used separate `/downloads`, `/data/movies` and 
    sudo chown -R 1000:1000 jellyseerr/config
    ```
 
-2. **Fedora only: relabel.** The new `compose.yaml` no longer uses `:Z`. Make sure the persistent rules from the [Fedora guide](#fedora-guide) exist, then reset the private categories that `:Z` left behind:
+2. **Move the data root from `/media` to `/srv/media`.** Required on Fedora, optional on Ubuntu (where `/media` works but is also used for automounted drives). The stack must be stopped (step 1), otherwise the mount point is busy.
+
+   If the media is on a **dedicated disk mounted at `/media`**, change its mount point in `/etc/fstab`:
 
    ```sh
-   sudo restorecon -RFv /media
+   sudo mkdir -p /srv/media
+   sudoedit /etc/fstab
+   ```
+
+   Edit only the mount point (second field) of the media disk line, for example:
+
+   ```
+   # before
+   UUID=1234-abcd  /media      ext4  defaults  0 2
+   # after
+   UUID=1234-abcd  /srv/media  ext4  defaults  0 2
+   ```
+
+   Then unmount the old path, let systemd regenerate its mount units from the new `fstab`, and mount the new path:
+
+   ```sh
+   sudo umount /media
+   sudo systemctl daemon-reload
+   sudo mount /srv/media
+   findmnt /srv/media
+   ```
+
+   If the folders are **plain directories on the root filesystem** instead, move them. `mv` within one filesystem is an instant rename that keeps existing hardlinks; check first that `df /media /srv` shows the same device:
+
+   ```sh
+   sudo mkdir -p /srv/media
+   sudo mv /media/downloads /media/movies /media/tvshows /srv/media/
+   ```
+
+   On Fedora, replace the old SELinux rule with one for the new path. List your local rules first and delete the `/media` one only if it is there:
+
+   ```sh
+   sudo semanage fcontext -l -C | grep media
+   sudo semanage fcontext -d "/media(/.*)?"
+   sudo semanage fcontext -a -t container_file_t "/srv/media(/.*)?"
+   ```
+
+3. **Fedora only: relabel.** The new `compose.yaml` no longer uses `:Z`. Make sure the project rule from the [Fedora guide](#fedora-guide) exists, then apply the labels and reset the private categories that `:Z` left behind:
+
+   ```sh
+   sudo restorecon -RFv /srv/media
    sudo restorecon -RFv "$(pwd -P)"
-   sudo find /media "$(pwd -P)" -context '*:s0:c*'   # should print nothing
+   matchpathcon /srv/media/movies/test.mkv               # should print container_file_t
+   sudo find /srv/media "$(pwd -P)" -context '*:s0:c*'   # should print nothing
    ```
 
    Start the stack again with `docker compose up -d` and check the Seerr migration with `docker logs -f jellyseerr`.
 
-3. **qBittorrent: update the save path.** In __Tools > Options > Downloads__ set __Default Save Path__ to `/data/downloads` and __Default Torrent Management Mode__ to `Automatic`. Existing torrents still point to `/downloads/...`, which no longer exists inside the container. Select them, right click → __Set location__ and replace the prefix `/downloads/...` with `/data/downloads/...` (same folder on the host). If a torrent shows missing files afterwards, right click → __Force recheck__.
+4. **qBittorrent: update the save path.** In __Tools > Options > Downloads__ set __Default Save Path__ to `/data/downloads` and __Default Torrent Management Mode__ to `Automatic`. Existing torrents still point to `/downloads/...`, which no longer exists inside the container. Select them, right click → __Set location__ and replace the prefix `/downloads/...` with `/data/downloads/...` (same folder on the host). If a torrent shows missing files afterwards, right click → __Force recheck__.
 
-4. **Radarr/Sonarr: enable hardlinks.** In __Settings > Media Management__ click __Show Advanced__ and enable __Use Hardlinks instead of Copy__. Root folders (`/data/movies`, `/data/tvshows`) do not change. If you had created a Remote Path Mapping for `/downloads`, delete it.
+5. **Radarr/Sonarr: enable hardlinks.** In __Settings > Media Management__ click __Show Advanced__ and enable __Use Hardlinks instead of Copy__. Root folders (`/data/movies`, `/data/tvshows`) do not change. If you had created a Remote Path Mapping for `/downloads`, delete it.
 
-5. **Deduplicate the existing copies.** Files imported before this change are full copies. `hardlink` (from util-linux) replaces identical files with hardlinks; `-c` compares content only and `-n` makes it a dry run. All three folders must be on the same host filesystem (`df /media/downloads /media/movies /media/tvshows` shows the same device):
+6. **Deduplicate the existing copies.** Files imported before this change are full copies. `hardlink` (from util-linux) replaces identical files with hardlinks; `-c` compares content only and `-n` makes it a dry run. All three folders must be on the same host filesystem (`df /srv/media/downloads /srv/media/movies /srv/media/tvshows` shows the same device):
 
    ```sh
-   sudo hardlink -c -n -v /media/downloads /media/movies /media/tvshows
+   sudo hardlink -c -n -v /srv/media/downloads /srv/media/movies /srv/media/tvshows
    ```
 
    Review the output, then run it for real:
 
    ```sh
-   sudo hardlink -c -v /media/downloads /media/movies /media/tvshows
+   sudo hardlink -c -v /srv/media/downloads /srv/media/movies /srv/media/tvshows
    ```
 
-6. **Verify.** The first column of `stat` is the link count; `2` means the file is shared between `downloads` and the library:
+7. **Verify.** The first column of `stat` is the link count; `2` means the file is shared between `downloads` and the library:
 
    ```sh
-   stat -c '%h %n' /media/movies/*/*.mkv
+   stat -c '%h %n' /srv/media/movies/*/*.mkv
    ```
 
    New imports should show `2` as well. A `1` on a file that is still seeding means it was copied.
