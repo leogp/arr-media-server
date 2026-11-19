@@ -1,0 +1,22 @@
+# Optional overlay: NVIDIA hardware transcoding (NVENC/NVDEC) for Jellyfin.
+#
+# Prerequisites:
+#   - Linux:   proprietary NVIDIA driver + NVIDIA Container Toolkit
+#              (https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
+#   - Windows: Docker Desktop with the WSL 2 backend + an up-to-date NVIDIA driver with WSL 2 support
+#              (https://docs.docker.com/desktop/features/gpu/).
+#
+# Enable it by adding this file to COMPOSE_FILE in .env:
+#   Linux:   COMPOSE_FILE=compose.yaml:docker-compose.gpu-nvidia.yml
+#   Windows: COMPOSE_FILE=compose.yaml;docker-compose.gpu-nvidia.yml
+# See README "Hardware transcoding".
+
+services:
+  jellyfin:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
