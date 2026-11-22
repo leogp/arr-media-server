@@ -5,6 +5,8 @@ prowlarr/
 qbittorrent/
 radarr/
 sonarr/
+caddy/data/
+caddy/config/
 .env
 tareas.txt
 indexers.png

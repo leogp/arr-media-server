@@ -11,6 +11,7 @@
 # Optional extras (see README "Choose your compose file" and "Hardware transcoding"):
 #   - GPU overlays via COMPOSE_FILE in .env (docker-compose.gpu-vaapi.yml, docker-compose.gpu-nvidia.yml).
 #   - FlareSolverr via COMPOSE_PROFILES=flaresolverr in .env.
+#   - Caddy reverse proxy via COMPOSE_PROFILES=proxy in .env (profiles combine: flaresolverr,proxy).
 
 services:
   # Torrent client
@@ -153,3 +154,21 @@ services:
       - JELLYFIN_CACHE_DIR=/tmp
     env_file:
       - .env
+  # Optional: reverse proxy that serves each web UI at http://<service>.localhost (see caddy/Caddyfile).
+  # Disabled by default; enable with COMPOSE_PROFILES=proxy in .env.
+  # Publishes only port 80; host.docker.internal lets it proxy apps running on the host.
+  caddy:
+    image: caddy:2
+    container_name: caddy
+    hostname: caddy
+    restart: unless-stopped
+    profiles:
+      - proxy
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/data:/data
+      - ./caddy/config:/config
+    ports:
+      - "80:80" # HTTP
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

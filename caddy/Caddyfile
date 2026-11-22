@@ -1,0 +1,37 @@
+# Caddy reverse proxy for the stack (enabled with COMPOSE_PROFILES=proxy).
+# Each site uses an explicit http:// address so Caddy serves plain HTTP and never tries to obtain certificates.
+# Upstreams are container hostnames and internal ports. After editing this file run: docker compose restart caddy
+
+http://jellyfin.localhost {
+	reverse_proxy jellyfin:8096
+}
+
+# Seerr (the Compose service is still named jellyseerr)
+http://seerr.localhost {
+	reverse_proxy jellyseerr:5055
+}
+
+http://radarr.localhost {
+	reverse_proxy radarr:7878
+}
+
+http://sonarr.localhost {
+	reverse_proxy sonarr:8989
+}
+
+http://prowlarr.localhost {
+	reverse_proxy prowlarr:9696
+}
+
+http://bazarr.localhost {
+	reverse_proxy bazarr:6767
+}
+
+http://qbit.localhost {
+	reverse_proxy qbittorrent:8080
+}
+
+# Example: a development app running on the host (it must listen on 0.0.0.0, not 127.0.0.1).
+# http://myapp.localhost {
+# 	reverse_proxy host.docker.internal:3000
+# }

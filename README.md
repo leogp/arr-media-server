@@ -13,6 +13,7 @@ The stack includes:
 * Jellyfin
 * Seerr (successor of Jellyseerr)
 * FlareSolverr (optional)
+* Caddy reverse proxy (optional)
 
 ### High-Level Workflow
 
@@ -55,6 +56,8 @@ Optional pieces are added from `.env`, never by editing `compose.yaml`:
   ```
 
 * **FlareSolverr** is enabled with `COMPOSE_PROFILES=flaresolverr`.
+
+* **Caddy reverse proxy** is enabled with `COMPOSE_PROFILES=proxy`. Profiles are combined with commas, for example `COMPOSE_PROFILES=flaresolverr,proxy`. See [Reverse proxy](#reverse-proxy-optional).
 
 When `COMPOSE_FILE` is unset, Compose loads `compose.yaml` only.
 
@@ -106,7 +109,7 @@ For the purposes of this guide, I will use `/srv/media` on Linux. Avoid `/media`
 | `UMASK` | `002`, so files are group-writable and shared between containers |
 | `DATA_ROOT` | Host folder mounted as `/data` |
 | `COMPOSE_FILE` | Optional, adds GPU overlays |
-| `COMPOSE_PROFILES` | Optional, enables FlareSolverr |
+| `COMPOSE_PROFILES` | Optional, enables FlareSolverr (`flaresolverr`) and/or the Caddy reverse proxy (`proxy`) |
 | `VAAPI_DEVICE` | Optional, render node for the VAAPI overlay |
 
 Prepare the host folders following your OS guide ([Fedora](#fedora-guide), [Ubuntu](#ubuntu-guide) or [Windows](#windows-guide)). On Linux, Seerr runs as UID 1000, so create its config folder with that owner before the first start:
@@ -129,7 +132,7 @@ First of all, you have to change the credentials. To find them see qBittorrent l
 ```sh
 docker logs qbittorrent
 ```
-Access to http://localhost:8080, change it in __Tools > Options > WebUI__
+Access to http://localhost:8080 (or http://qbit.localhost with the [reverse proxy](#reverse-proxy-optional)), change it in __Tools > Options > WebUI__
 
 Then go to __Tools > Options > Downloads__ and set:
 
@@ -141,7 +144,7 @@ Default Save Path: /data/downloads
 With the automatic mode, torrents sent by Radarr/Sonarr are saved in a subfolder named after their category (for example `/data/downloads/radarr`), always inside `/data`.
 
 ### Sonarr/Radarr
-Enter to http://localhost:7878 for Radarr and create a user.
+Enter to http://localhost:7878 (or http://radarr.localhost with the [reverse proxy](#reverse-proxy-optional)) for Radarr and create a user.
 
 Go to __Settings > Media Management__
 
@@ -164,10 +167,10 @@ password: yourQbittorrentPassword
 
 Finally, copy the API key located in __General__
 
-Repeat these steps for Sonarr (http://localhost:8989), but in Media Management add _/data/tvshows_
+Repeat these steps for Sonarr (http://localhost:8989 or http://sonarr.localhost), but in Media Management add _/data/tvshows_
 
 ### Prowlarr
-First access to the service in http://localhost:9696 and create a user.
+First access to the service in http://localhost:9696 (or http://prowlarr.localhost with the [reverse proxy](#reverse-proxy-optional)) and create a user.
 
 Go to __Download Clients__ and connect qBittorrent in the same way you did it before.
 
@@ -205,7 +208,7 @@ Host: http://flaresolverr:8191/
 Then edit only the indexers that need it and add the `flaresolverr` tag to them. Indexers without the tag keep connecting directly.
 
 ### Bazarr
-To configure Bazarr access to http://localhost:6767
+To configure Bazarr access to http://localhost:6767 (or http://bazarr.localhost with the [reverse proxy](#reverse-proxy-optional))
 
 Then connect Bazarr to Sonarr and Radarr using their respective hostnames, ports and API Keys. For instance, to connect to sonarr you must do:
 
@@ -218,7 +221,7 @@ API Key: sonarrApiKey
 You should see the Sonarr/Radarr version if you press the Test button
 
 ### Jellyfin
-Access to http://localhost:8096, select your language and configure your credentials
+Access to http://localhost:8096 (or http://jellyfin.localhost with the [reverse proxy](#reverse-proxy-optional)), select your language and configure your credentials
 
 Next, configure the media libraries by importing TV shows (`/data/tvshows`) and movies (`/data/movies`) into Jellyfin, matching the folders you previously set up
 
@@ -227,7 +230,7 @@ Finally, select your preferred metadata language and login to the application.
 ### Seerr
 Seerr is the successor of Jellyseerr. The service keeps the `jellyseerr` name and its `./jellyseerr/config` folder, so existing installs are migrated automatically on first start.
 
-Go to http://localhost:5055, choose Jellyfin as your media server and login to it.
+Go to http://localhost:5055 (or http://seerr.localhost with the [reverse proxy](#reverse-proxy-optional)), choose Jellyfin as your media server and login to it.
 
 ```
 host: http://jellyfin:8096
@@ -262,6 +265,83 @@ API Key: sonarrApiKey
 Quality Profile: Any
 Root Folder: /data/tvshows
 ```
+
+## Reverse proxy (optional)
+
+Every service publishes its own port, so you have to remember `8080`, `7878`, `8989`, ... The optional Caddy reverse proxy gives each web UI a name instead: open `http://radarr.localhost` rather than `http://localhost:7878`. Caddy publishes only port 80 and forwards each name to the container hostname and internal port defined in `caddy/Caddyfile`. The `localhost:<port>` URLs keep working.
+
+Enable it in `.env` and start it. Combine it with FlareSolverr using commas:
+
+```env
+COMPOSE_PROFILES=proxy
+# or
+COMPOSE_PROFILES=flaresolverr,proxy
+```
+
+```sh
+docker compose up -d
+```
+
+| Service | URL | Upstream |
+|---|---|---|
+| Jellyfin | http://jellyfin.localhost | `jellyfin:8096` |
+| Seerr | http://seerr.localhost | `jellyseerr:5055` |
+| Radarr | http://radarr.localhost | `radarr:7878` |
+| Sonarr | http://sonarr.localhost | `sonarr:8989` |
+| Prowlarr | http://prowlarr.localhost | `prowlarr:9696` |
+| Bazarr | http://bazarr.localhost | `bazarr:6767` |
+| qBittorrent | http://qbit.localhost | `qbittorrent:8080` |
+
+FlareSolverr has no web UI, so it has no entry.
+
+Every site in the Caddyfile uses an explicit `http://` address, so Caddy serves plain HTTP and does not try to obtain HTTPS certificates. The warnings `no automatic HTTPS will be applied` and `HTTP/2 skipped because it requires TLS` in `docker logs caddy` are expected.
+
+__Why `*.localhost` works__
+
+`localhost` is a reserved name that always points to the machine itself ([RFC 6761](https://www.rfc-editor.org/rfc/rfc6761#section-6.3)), and so does any name under it. Nothing has to be added to `/etc/hosts` or to a DNS server:
+
+* Chrome and Firefox resolve every `*.localhost` name to the loopback address on their own, on every OS.
+* On Linux, the rest of the system gets the same answer from `nss-myhostname`, the `myhostname` module in the `hosts:` line of `/etc/nsswitch.conf` (enabled by default on Fedora). Check it with:
+
+  ```sh
+  getent hosts radarr.localhost
+  ```
+
+__qBittorrent answers "Unauthorized"__
+
+qBittorrent validates the `Host` header of each request. If http://qbit.localhost answers `Unauthorized`, go to __Tools > Options > WebUI__ and either disable __Enable Host header validation__ or add `qbit.localhost` to __Server domains__ (entries are separated by `;`).
+
+__Proxy a development app running on the host__
+
+Caddy can also give a name to an app that runs directly on the host, outside Docker. Uncomment the example at the end of `caddy/Caddyfile` and adjust the name and port:
+
+```
+http://myapp.localhost {
+	reverse_proxy host.docker.internal:3000
+}
+```
+
+`host.docker.internal` points to the host thanks to `extra_hosts: host-gateway` in `compose.yaml`. The app must listen on `0.0.0.0`, not only on `127.0.0.1`, because the requests come from the Docker network instead of the loopback interface. Then restart Caddy:
+
+```sh
+docker compose restart caddy
+```
+
+A restart also picks up the file when your editor saves it as a new file, which a single-file bind mount does not follow until the container starts again.
+
+__Port 80 conflicts__
+
+Caddy needs port 80 on the host. If `docker compose up` reports that the port is already allocated, or another program (a local web server, another proxy) needs it, stop Caddy:
+
+```sh
+docker compose stop caddy
+```
+
+The rest of the stack keeps running and the `localhost:<port>` URLs keep working. `docker compose start caddy` brings it back. To see what is using the port, run `sudo ss -ltnp | grep ':80 '`.
+
+__Other devices on your LAN__
+
+`*.localhost` always means "this device", so on a phone, a TV or another computer `http://jellyfin.localhost` points to that device, not to the server. From the LAN, use the server IP and port, for example `http://192.168.1.50:8096`, and give the laptop or computer that runs the stack a DHCP reservation in your router so that IP does not change. If you want names on the LAN, run a local DNS server (your router, AdGuard Home or Pi-hole) with names under `home.arpa`, the domain reserved for home networks ([RFC 8375](https://www.rfc-editor.org/rfc/rfc8375)), for example `jellyfin.home.arpa`.
 
 ## Hardware transcoding
 
@@ -554,7 +634,7 @@ Open a terminal in the project folder (the WSL shell, or PowerShell/Command Prom
 docker compose up -d
 ```
 
-All service web UIs are then reachable at `http://localhost:<port>` as listed in the README.
+All service web UIs are then reachable at `http://localhost:<port>` as listed in the README, or at `http://<service>.localhost` with the [reverse proxy](#reverse-proxy-optional).
 
 > **Note:** Jellyfin publishes `7359/udp` (client auto-discovery) and `1900/udp` (DLNA). DLNA has been a plugin since Jellyfin 10.9, and discovery broadcasts may not reach the Docker Desktop VM. If Docker reports that one of these ports is not available on Windows, comment out that line in `compose.yaml`; streaming on port 8096 is not affected.
 
@@ -670,3 +750,4 @@ This repository provides a basic setup for each service. For advanced configurat
 - **Seerr**: https://docs.seerr.dev
 - **FlareSolverr**: https://github.com/FlareSolverr/FlareSolverr
 - **Jellyfin**: https://jellyfin.org/docs
+- **Caddy**: https://caddyserver.com/docs/
