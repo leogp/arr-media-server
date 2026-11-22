@@ -718,6 +718,8 @@ These steps move an install that used separate `/downloads`, `/data/movies` and 
 
 5. **Radarr/Sonarr: enable hardlinks.** In __Settings > Media Management__ click __Show Advanced__ and enable __Use Hardlinks instead of Copy__. Root folders (`/data/movies`, `/data/tvshows`) do not change. If you had created a Remote Path Mapping for `/downloads`, delete it.
 
+   **Backups.** If you had set *System > Backup > Folder* to `/data/backup` (older versions of this guide did), set it back to the default `Backups` in Radarr, Sonarr and Prowlarr: backups now stay in `/config/Backups`, and Prowlarr no longer mounts `/data`. Once new backups are being created, the old `backup` folders under `DATA_ROOT` can be deleted.
+
 6. **Deduplicate the existing copies.** Files imported before this change are full copies. `hardlink` (from util-linux) replaces identical files with hardlinks; `-c` compares content only and `-n` makes it a dry run. All three folders must be on the same host filesystem (`df /srv/media/downloads /srv/media/movies /srv/media/tvshows` shows the same device):
 
    ```sh
@@ -733,10 +735,14 @@ These steps move an install that used separate `/downloads`, `/data/movies` and 
 7. **Verify.** The first column of `stat` is the link count; `2` means the file is shared between `downloads` and the library:
 
    ```sh
-   stat -c '%h %n' /srv/media/movies/*/*.mkv
+   find /srv/media/movies /srv/media/tvshows -type f -size +100M -printf '%n %p\n'
    ```
 
-   New imports should show `2` as well. A `1` on a file that is still seeding means it was copied.
+   New imports should show `2` as well. A `1` on a file that is still seeding means it was copied. [TROUBLESHOOTING.md](TROUBLESHOOTING.md#duplicated-content-and-disk-filling-up) has the full checklist to keep it that way.
+
+## Troubleshooting
+
+When a request does not download, does not import or does not show up in Jellyfin, or the disk fills up with duplicated content, follow [TROUBLESHOOTING.md](TROUBLESHOOTING.md). It starts from the symptom and points to the stage of the pipeline that failed.
 
 ## Official documentation
 
